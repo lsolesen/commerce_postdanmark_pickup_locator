@@ -1,0 +1,10 @@
+#simplemodal-overlay {
+	background-repeat: #000;
+}
+.modalCloseImg.simplemodal-close {
+	background: transparent url('tb-close.png') no-repeat right;
+	width: 15px;
+	height: 15px;
+	display: block;
+	float: right;
+}

@@ -1,0 +1,14 @@
+name = Postnord Pickup Locator (DK)
+description = "This module shows map with available pickup places at drupal commerce checkout"
+package = Commerce (shipping)
+dependencies[] = commerce
+dependencies[] = commerce_shipping
+core = 7.x
+
+scripts[] = js/pickup.js
+
+configure = admin/commerce/config/shipping/methods/pickup_locator/edit
+
+files[] = pickup_locator.admin.info
+files[] = pickup_locator.install
+files[] = pickup_locator.module

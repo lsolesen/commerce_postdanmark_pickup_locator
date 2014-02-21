@@ -1,0 +1,574 @@
+<?php
+
+/**
+ * @file
+ * Defines an pickup_locator shipping method.
+ */
+
+ /**
+* Implementation of hook_menu().
+*/
+
+function pickup_locator_menu() {
+	
+	$items['admin/commerce/config/shipping/methods/pickup_locator/messages'] = array(
+		'title' => 'Pickup Locations',
+		'description' => 'Change your pickup locations options',
+		'page callback' => '',
+		'access arguments' => array('administer site configuration'),
+		'file' => 'system.admin.inc',
+		'file path' => drupal_get_path('module', 'system'),
+	);
+	
+	$items['admin/commerce/config/shipping/methods/pickup_locator/edit'] = array(
+		'title' => 'Edit',
+		'description' => 'Adjust the pickup locator settings.',
+		'page callback' => 'drupal_get_form',
+		'page arguments' => array('pickup_locator_settings_form'),
+		'access arguments' => array('administer shipping'),
+		'file' => 'pickup_locator.admin.inc',
+		'type' => MENU_LOCAL_TASK,
+		'context' => MENU_CONTEXT_INLINE,
+		'weight' => 0,
+	);
+	
+	$items['ajax/load_service_points'] = array(
+    'page callback' => 'pickup_locator_get_ajax_points',
+    'type' => MENU_CALLBACK,
+    'access arguments' => array('access content'),
+  );
+
+	$items['ajax/set_order_service_point'] = array(
+		'page callback' => 'pickup_locator_set_ajax_point',
+		'type' => MENU_CALLBACK,
+		'access arguments' => array('access content'),
+  );
+  
+	return $items;
+}
+
+
+/**
+ * TODO
+ * hook_commerce_shipping_service_info();
+ * adding new service menu
+ */
+ 
+/*function commerce_pickup_locator_commerce_shipping_service_info() {
+	$shipping_service = array();
+	$shipping_service = commerce_shipping_services();
+	$shipping_service['tt'] = array(
+		'title' => t('test'),
+		'shipping_method'=>'free_shipping',
+		'calbacks' => array(
+			'rate'=>'test',
+		),
+	); 
+	
+	return $shipping_service;
+}*/
+
+
+function pickup_locator_get_ajax_points(){
+	$postCode = (int)$_GET['post_code'];
+	
+	//cache here
+	$service_points = getPostnordServicePoints($postCode);
+	drupal_json_output($service_points);
+} 
+
+function pickup_locator_set_ajax_point(){}
+
+ /**
+ * Access callback: grants users access to the service operations if they
+ * have the specific permission or generic shipping permission.
+ *
+ * @param $op
+ *   The operation string: of create, update, or delete.
+ *
+ * @return
+ *   Boolean indicating the user's access.
+ */
+function pickup_locator_service_access($op) {
+  return user_access('administer shipping');
+}
+ 
+/**
+ * Implements hook_commerce_shipping_method_info().
+ */
+function pickup_locator_commerce_shipping_method_info() {
+  $shipping_methods = array();
+
+  $shipping_methods['pickup_locator_method'] = array(
+    'title' => t('Danish Post pickup method'),
+    'description' => t('Defines a Pickup Locator for Danish Post point service.'),
+  );
+
+  return $shipping_methods;
+}
+
+/**
+ * Implements hook_commerce_shipping_service_info().
+ */
+function pickup_locator_commerce_shipping_service_info() {
+  $shipping_services = array();
+
+  $shipping_services['pickup_locator_service'] = array(
+    'title' => t('Danish Post pickup method'),
+    'description' => t('Danish post pickup locator service to find places on the map.'),
+    'display_title' => t('Post Office Pickup'),
+    'shipping_method' => 'pickup_locator_method',
+    'price_component' => 'shipping',
+    'callbacks' => array(
+      'rate' => 'pickup_locator_service_rate',
+      'details_form' => 'pickup_locator_service_details_form',
+      'details_form_validate' => 'pickup_locator_service_details_form_validate',
+      'details_form_submit' => 'pickup_locator_service_details_form_submit',
+    ),
+  );
+
+  return $shipping_services;
+}
+
+/**
+ * Shipping service callback: returns a base price array for a shipping service
+ * calculated for the given order.
+ */
+function pickup_locator_service_rate($shipping_service, $order) {
+  return array(
+    'amount' => ( (int)variable_get('pickup_locator_rate','') * 100),
+    'currency_code' => 'DKK',
+    'data' => array(),
+  );
+}
+
+function pickup_locator_form_commerce_checkout_form_alter(&$form, &$form_state) {
+
+	global $user;
+	$postalCode = 0;
+	
+	
+	$order = commerce_cart_order_load($user->uid);
+	$wrapper = entity_metadata_wrapper('commerce_order', $order);
+	
+  if(($wrapper->commerce_customer_shipping->value())){
+	  $shipping_address = $wrapper->commerce_customer_shipping->commerce_customer_address->value();
+	  if($shipping_address){
+			$postalCode = $shipping_address['postal_code'];
+	  }
+  }
+
+	$modulePath = drupal_get_path('module', 'pickup_locator');
+	
+	if($postalCode) {
+		$form['#attached']['js'][] = array(
+			'data' => $modulePath . 'http://maps.googleapis.com/maps/api/js?v=3&sensor=false', 
+			'type' => 'file'
+		); 
+		$form['#attached']['js'][] = array(
+			'data' => $modulePath . '/js/test.js', 
+			'type' => 'file'
+		); 
+	}
+	
+	$form['pickup_locator_postCode'] = array(
+    '#type' => 'hidden',
+    '#title' => t('postCode'),
+    '#default_value' => $postalCode,
+		'#attributes' => array('id'=>'pickup_postCode'),
+	);
+}
+
+/**
+ * Shipping service callback: returns the pickup_locator shipping service details form.
+ */
+function pickup_locator_service_details_form($pane_form, $pane_values, $checkout_pane, $order, $shipping_service) {
+
+  $form = array();
+  $modulePath = drupal_get_path('module', 'pickup_locator');
+	$postalCode = '';
+  $wrapper = entity_metadata_wrapper('commerce_order', $order);
+  if(($wrapper->commerce_customer_shipping->value())){
+	  $shipping_address = $wrapper->commerce_customer_shipping->commerce_customer_address->value();
+	  if($shipping_address){
+		$postalCode = $shipping_address['postal_code'];
+			if(strlen($postalCode) == 4){
+				$servicePoints = getPostnordServicePoints($postalCode);
+			}
+	  }
+  }
+	
+  $pane_values['service_details'] += array(
+    'pickup_location' => '',
+//	'find_location' => '',
+		'pickup_service_point_id' => '',
+		'pickup_service_point_id_name' => '',
+		'pickup_service_point_id_address' => '',
+		'pickup_service_point_id_city' => '',
+		'pickup_service_point_id_postcode' => '',
+		'pickup_postnord_country' => '',
+  );
+
+  $serviceFields = array(
+		'pickup_service_point_id',
+		'pickup_service_point_id_name',
+		'pickup_service_point_id_address',
+		'pickup_service_point_id_city',
+		'pickup_service_point_id_postcode',
+		'pickup_postnord_country'
+  );
+  foreach ( $serviceFields as $f){
+	   $form[$f] = array(
+	    '#type' => 'hidden',
+	    '#title' => t(''),
+	    '#default_value' => $pane_values['service_details'][$f],
+			'#size' => '30',
+			'#weight' => 0,
+		);
+  }
+	
+  $form['pickup_location'] = array(
+	  '#type' => 'textfield',
+	  '#title' => t('Pickup Location'),
+	   // '#description' => t('Click the button below to find pickup location on map'),
+	  '#default_value' => $pane_values['service_details']['pickup_location'],
+		'#size' => '30',
+		'#attributes' => array ('readonly'=>'readonly'),
+		'#weight' => 0,
+	  '#required' => TRUE,
+		'#suffix' => getMapHtml(($servicePoints ? $servicePoints['radio_html'] : null)) . '<img id="sogLoader" style="display:inline" src="'.base_path().$modulePath . '/images/loading.gif'.'" />'.
+								'<input alt="#TB_inline?inlineId=showMap"'. 
+								'style="display:none;float: none;" class="form-button checkout-processed" 0="" type="button"'.
+								' id="edit-commerce-shipping-service-details-find-location" name="'.t('Find Pickup location').'" value="'.t('Find Pickup location').'"/>'.	
+								'<script> 
+										var pickup = new PickupLocator();
+								</script>',
+);
+
+//ADDING Javascript files  
+
+	$form['#attached']['css'][] = array(
+			'data' => $modulePath . '/css/modal.css', 
+			'type' => 'file',); 
+			
+	$form['#attached']['js'][] = array(
+    'data' => $modulePath . '/js/sp_select.js', 
+    'type' => 'file',);
+	
+	 $form['#attached']['js'][] = array(
+			'data' => $modulePath . '/js/jquery.simplemodal-1.4.4.js', 
+			'type' => 'file',);
+			
+  return $form;
+}
+
+/**
+ * Shipping service callback: validates the pickup_locator shipping service details.
+ */
+function pickup_locator_service_details_form_validate($details_form, $details_values, $shipping_service, $order, $form_parents) {
+
+  if (strlen($details_values['pickup_location']) < 2) {
+    form_set_error(implode('][', array_merge($form_parents, array('find_location'))), t('Pickup location missing, please click "'.$details_form['find_location']['#value'] .'" button to set it.'));
+
+    // Even though the form error is enough to stop the submission of the form,
+    // it's not enough to stop it from a Commerce standpoint because of the
+    // combined validation / submission going on per-pane in the checkout form.
+    return FALSE;
+  }
+}
+
+function pickup_locator_form_alter(&$form, &$form_state, $form_id) {
+ if ($form_id=='commerce_checkout_form_checkout') {
+	 $serviceFields = array(
+	'pickup_service_point_id',
+	'pickup_service_point_id_name',
+	'pickup_service_point_id_address',
+	'pickup_service_point_id_city',
+	'pickup_service_point_id_postcode',
+	'pickup_postnord_country'
+	);
+	  
+  foreach($serviceFields as $field) {
+		unset($form['customer_profile_shipping'][$field]);
+  }
+}
+	if ($form_id=='commerce_checkout_form_review') {
+		//review form
+	}
+}
+function pickup_locator_commerce_checkout_page_info_alter (&$checkout_pages) {
+	//$checkout_pages = commerce_checkout_commerce_order_state_info();
+	//print_r($checkout_pages);
+	//die();
+}
+
+
+/**
+ * Shipping service callback: increases the shipping line item's unit price if
+ * express delivery was selected.
+ */
+function pickup_locator_service_details_form_submit($details_form, $details_values, $line_item) {
+	
+	global $user;
+	
+	
+	$order = commerce_cart_order_load($user->uid);
+	 
+	$order_wrapper = entity_metadata_wrapper('commerce_order', $order);
+
+	
+  $profile = null;
+  if($order_wrapper->commerce_customer_billing->value()){
+    $profile = commerce_customer_profile_load($order_wrapper->commerce_customer_billing->profile_id->value());
+  }else if($order_wrapper->commerce_customer_shipping->value()){
+    $profile = commerce_customer_profile_load($order_wrapper->commerce_customer_shipping->profile_id->value());
+  }
+	if($profile){
+	//	$profile_id = $order_wrapper->commerce_customer_shipping->profile_id->value();
+			
+
+		// load customer profile
+		//$profile = commerce_customer_profile_load($profile_id);
+		if ($profile_wrapper = entity_metadata_wrapper('commerce_customer_profile', $profile)) {
+
+			$profile_wrapper->pickup_service_point_id->set($details_form['pickup_service_point_id']['#value']);
+			$profile_wrapper->pickup_service_point_id_name->set($details_form['pickup_service_point_id_name']['#value']);
+			$profile_wrapper->pickup_service_point_id_address->set($details_form['pickup_service_point_id_address']['#value']);
+			$profile_wrapper->pickup_service_point_id_city->set( $details_form['pickup_service_point_id_city']['#value']);
+			$profile_wrapper->pickup_service_point_id_postcode->set($details_form['pickup_service_point_id_postcode']['#value']);
+			$profile_wrapper->pickup_postnord_country->set($details_form['pickup_postnord_country']['#value']);
+			$profile_wrapper->save();
+		}
+	}
+
+}
+
+/**
+ * Implements hook_commerce_price_component_type_info().
+ */
+function pickup_locator_commerce_price_component_type_info() {
+  return array(
+    'pickup_locator_shipping_service_express' => array(
+      'title' => t('Express delivery'),
+      'weight' => 20,
+    ),
+  );
+}
+
+    //Get postnord
+function getPostnordServicePoints($postcode) {
+		
+		$api_key = variable_get('pickup_locator_api','');
+		$country_code = 'DK';
+		$numberOfServicePoints = 20;
+		$google_map = 'yes';
+        if (strlen((int) $postcode) == 4 && strlen($api_key) > 1 ){
+		
+            $url = "http://api.postnord.com/wsp/rest/BusinessLocationLocator" .
+                    "/Logistics/ServicePointService_1.0/findNearestByAddress.json?" .
+                    "consumerId=" . trim($api_key) .
+                    "&countryCode=" . trim($country_code) .
+                    "&postalCode=" . trim($postcode) . '&numberOfServicePoints='.$numberOfServicePoints;
+
+            $curl = curl_init();
+            curl_setopt($curl, CURLOPT_URL, $url);
+            curl_setopt($curl, CURLOPT_HEADER, 0);
+            curl_setopt($curl, CURLOPT_RETURNTRANSFER, 1);
+            $jsonFile = curl_exec($curl);
+            curl_close($curl);
+
+            $data = json_decode($jsonFile);
+			
+            if ($data) {
+                if ($google_map == 'yes') {
+                    $post_addresses['radio_html'] = GetPickupLocationsResult($postcode, $data);
+
+                    $points = $data->servicePointInformationResponse->servicePoints;
+
+                    $addresses = array();
+                    $name = array();
+                    $number = array();
+                    $generate = array();
+                    $opening = array();
+                    $close = array();
+                    $opening_sat = array();
+                    $close_sat = array();
+                    $lat = array();
+                    $lng = array();
+                    $key = 1;
+					$servicePointId = array();
+					
+                    if (!empty($points)) {
+                        foreach ($points as $key => $point) {
+                            if ($point->visitingAddress->streetName) {
+                                $addresses[] = $point->visitingAddress->streetName . ' ' . $point->visitingAddress->streetNumber;
+                                $name[] = $point->name;
+								if(isset($point->openingHours[0]))
+									$opening[] = $point->openingHours[0]->from1;
+								if(isset($point->openingHours[0]))
+									$close[] = $point->openingHours[0]->to1;
+								if(isset($point->openingHours[5]))
+									$opening_sat[] = $point->openingHours[5]->from1;
+								if(isset($point->openingHours[5]))
+									$close_sat[] = $point->openingHours[5]->to1;
+                                $lat[] = $point->coordinate->northing;
+                                $lng[] = $point->coordinate->easting;
+                                $number[] = $point->deliveryAddress->postalCode . ' ' . $point->deliveryAddress->city;
+                                $servicePointId[] = $point->servicePointId;
+								if(isset($generate[$point->servicePointId]) && isset($point->openingHours[0]))
+									$generate[$point->servicePointId] = $point->deliveryAddress->streetName . ' ' . $point->deliveryAddress->streetNumber . ',' . $point->name . ',' . $point->deliveryAddress->postalCode . ' ' . $point->deliveryAddress->city . ',' . ($key) . ',' . $point->openingHours[0]->from1 . ',' . $point->openingHours[0]->to1 . ',' . $point->openingHours[5]->from1 . ',' . $point->openingHours[5]->to1 . ',' . $point->coordinate->northing . ',' . $point->coordinate->easting;
+
+                                $key++;
+                            }
+                        }
+                    }
+
+                    $post_addresses['addresses'] = $addresses;
+                    $post_addresses['name'] = $name;
+                    $post_addresses['number'] = $number;
+                    $post_addresses['generate'] = $generate;
+                    $post_addresses['opening'] = $opening;
+                    $post_addresses['close'] = $close;
+                    $post_addresses['opening_sat'] = $opening_sat;
+                    $post_addresses['close_sat'] = $close_sat;
+                    $post_addresses['lat'] = $lat;
+                    $post_addresses['lng'] = $lng;
+                    $post_addresses['servicePointId'] = $servicePointId;
+                } else {
+                    $points = $data->servicePointInformationResponse->servicePoints;
+
+                    $addresses = array();
+                    $servicePointId = array();
+                    $key = 1;
+
+                    if (!empty($points)) {
+                        foreach ($points as $key => $point) {
+                            if ($point->visitingAddress->streetName) {
+                                $addresses[] = $point->visitingAddress->streetName . ' ' . $point->visitingAddress->streetNumber;
+                                $servicePointId[] = $point->servicePointId;
+
+                                $key++;
+                            }
+                        }
+                    }
+
+                    $post_addresses['addresses'] = $addresses;
+                    $post_addresses['servicePointId'] = $servicePointId;
+                }
+				
+                return $post_addresses;
+            } else {
+                $post_addresses['error'] = 'Der er desvarre ingen Post Danmark udleveringssted i det onskede postnummer.';
+                return $post_addresses;
+            }
+        }
+}
+
+function GetPickupLocationsResult($zip, $data) {
+  
+		$google_map = 'yes';
+		
+        $response = '';
+        $shops = $data->servicePointInformationResponse->servicePoints;
+
+        if (!isset($shops) || sizeof($shops) == 0) {
+            $response .= '<span class="postnord-error" id="postnord-error">Postnummeret er ikke korrekt.</span><br/>';
+            $response .= '<input type="hidden" name="postnord_pickupLocation" id="location" class="postnord_location">';
+        } else {
+            if ($google_map == 'yes') {
+                $response .= '<div class="postnord-choose"><strong>Vælg et afhentningssted:</strong></div>';
+            } else {
+                $response .= '<div class="postnord-choose"><strong>Vælg et afhentningssted:</strong></div>';
+            }
+            $response .= '<ul id="mapAddress">';
+            $checked = ' CHECKED';
+            if (sizeof($shops) == 1) {
+                $response .= createShop($shops[0], $checked);
+            } else {
+                $checked = ' CHECKED';
+                $cnt = 0;
+                $count = count($shops);
+                foreach ($shops as $key => $shop) {
+                    $response .= createShop($shop, $checked, $cnt, $count);
+                    $cnt++;
+                    $checked = '';
+                }
+            }
+
+            $response .= '<ul>';
+        }
+
+        return $response;
+}
+
+function createShop($shop, $checked, $key, $count) {
+  ++$key;
+  $response = '<li>';
+	
+  if ($count == $key)
+    $response .= '<input type="radio" id="place_' . trim($shop->servicePointId) . '" value="' . trim($shop->servicePointId) . '" name="postnord_pickupLocation" class="radio validate-one-required-by-name" />';
+  else
+    $response .= '<input type="radio" id="place_' . trim($shop->servicePointId) . '" value="' . trim($shop->servicePointId) . '" name="postnord_pickupLocation" class="radio" />';
+
+	$response .= $key . '. ';
+	$response .= '<label for="place_'. trim($shop->servicePointId) . '">';
+	$response .= '<strong>' . trim($shop->name) .'</strong>';
+	$response .= 
+	trim($shop->deliveryAddress->streetName) 	. ' ' . 
+	trim($shop->deliveryAddress->streetNumber). ' ' .
+	trim($shop->deliveryAddress->city) 				. '<input type="hidden" class="service_postcode" value="' .
+	trim($shop->deliveryAddress->postalCode) 	. '" />';
+	$response .= '</label>';
+	$response .= '</li>';
+
+	if ($key % 4 == 0)
+		$response .= '<div class="clear"></div>';
+		
+	return $response;
+}
+
+function getMapHtml($radioHtml = null) {
+	$googleMapContent ='';
+	
+	$googleMapContent .= 
+	'<div id="showMap" style="position: absolute; top: 0; left: -10000px; margin: 0 auto;">';
+			$googleMapContent .= '    <style>';
+			$googleMapContent .= '        #sog_loader, #showMap_input {';
+			$googleMapContent .= '            margin-left: 15px;';
+			$googleMapContent .= '        }';
+			$googleMapContent .= '        #TB_ajaxgoogleMapContent {';
+			$googleMapContent .= '            overflow: visible;';
+			$googleMapContent .= '        }';
+			$googleMapContent .= '        #pickupLocations {';
+			$googleMapContent .= '            margin-top: 15px;';
+			$googleMapContent .= '            margin-bottom: 15px;';
+			$googleMapContent .= '        }';
+			$googleMapContent .= '        ul#mapAddress {';
+			$googleMapContent .= '            list-style: none;';
+			$googleMapContent .= '            padding-left: 0px;';
+			$googleMapContent .= '        }';
+			$googleMapContent .= '        ul#mapAddress li {';
+			$googleMapContent .= '            float: left;';
+			$googleMapContent .= '            margin-left: 30px;';
+			$googleMapContent .= '            width: 160px;';
+			$googleMapContent .= '            margin-bottom: 15px;';
+			$googleMapContent .= '            cursor: pointer;';
+			$googleMapContent .= '        }';
+			$googleMapContent .= '        ul#mapAddress li input[name="postnord_pickupLocation"]{';
+			$googleMapContent .= '            margin-right: 5px;';
+			$googleMapContent .= '        }';
+			$googleMapContent .= '        #sp_address {';
+			$googleMapContent .= '            font-weight: normal;';
+			$googleMapContent .= '        }';
+			$googleMapContent .= '        .buttons-container {';
+			$googleMapContent .= '            height: 20px';
+			$googleMapContent .= '        }';
+			$googleMapContent .= '    </style>';
+			$googleMapContent .= '    <div id="map_canvas" style="height: 350px; width: 780px; position: relative; margin-top: 20px;"></div><div id="pickupLocations" class="pickupLocation-container"><div id="map-button-save" style="cursor: pointer; float: right; padding: 2px 5px; font-weight:bold; border: 1px solid #000; background:#ccc;"><span><span>Afslut og Gem</span></span></div><div id="locator_map_radio_html">'.($radioHtml ? $radioHtml : '').'</div><div class="clear"></div><div class="buttons-container"><div id="map-button-save2" style="cursor: pointer; float: right; padding: 2px 5px; font-weight:bold; border: 1px solid #000; background:#ccc;"><span><span>Afslut og Gem</span></span></div></div>';
+			$googleMapContent .= '</div></div></div>';
+			
+	return $googleMapContent;
+}
+
+
+

@@ -1,0 +1,148 @@
+<?php
+
+/**
+ * @file Contains updade hooks for the commerce_shipping module.
+ */
+
+ 
+function getServiceFields(){
+	
+ $fields = array(
+  // Prepare field.
+  array(
+    'field_name' => 'pickup_service_point_id',
+    'type' => 'text',
+	'label' =>  t('Service Point ID'),
+	'description' => t(''),
+  ),
+   array(
+    'field_name' => 'pickup_service_point_id_name',
+    'type' => 'text',
+	'label' =>  t('Service Point Name'),
+	'description' => t(''),
+  ),
+  array(
+    'field_name' => 'pickup_service_point_id_address',
+    'type' => 'text',
+	'label' =>  t('Service Point Address'),
+	'description' => t(''),
+  ),
+  array(
+    'field_name' => 'pickup_service_point_id_city',
+    'type' => 'text',
+	'label' =>  t('Service Point City'),
+	'description' => t(''),
+  ),
+  array(
+    'field_name' => 'pickup_service_point_id_postcode',
+    'type' => 'text',
+	'label' =>  t('Service Point Postcode'),
+	'description' => t(''),
+  ),
+  array(
+    'field_name' => 'pickup_postnord_country',
+    'type' => 'text',
+	'label' =>  t('Service Point Country'),
+	'description' => t(''),
+  ),
+  );
+  
+  return $fields;
+} 
+ 
+ 
+/**
+ * Implements hook_uninstall().
+ */
+function pickup_locator_uninstall() {
+		
+	   $fields = getServiceFields();
+	   foreach ($fields as $field){
+		$tmp = field_info_field($field['field_name']);
+		if(!empty($tmp)){
+			field_delete_field($field);
+			$f = field_info_instance('commerce_customer_profile',$field['field_name'],'shipping' );
+			field_delete_instance($f);
+		}
+	 }
+
+}
+
+/**
+ * Implements hook_install().
+ */
+function pickup_locator_install() {
+ 
+ $fields = getServiceFields();
+ 
+ foreach ($fields as $field){
+	$tmp = field_info_field($field['field_name']);
+	if(empty( $tmp) ){
+		$f = field_create_field($field);
+		createPickupLocatorFieldInstance($f);
+	}
+ }
+/* 
+$field = field_info_field('service_point_id');
+
+
+if (empty($field)) {
+		$field = array(
+		'field_name' => 'service_point_id',
+		'type' => 'text',
+		'label' => 'service id',
+		'entity_types' => array('commerce_order'),
+		'translatable' => FALSE,
+		);
+	$field = field_create_field($field);
+}
+
+
+//pickup_locator_postnord_country
+
+  // Create fields.
+ 
+  $field1 = field_create_field($field1);
+  $field2 = field_create_field($field2);
+  $field3 = field_create_field($field3);
+  $field4 = field_create_field($field4);
+  $field5 = field_create_field($field5);
+  $field6 = field_create_field($field6);
+
+  createPickupLocatorFieldInstance($field1);
+  createPickupLocatorFieldInstance($field2);
+  createPickupLocatorFieldInstance($field3);
+  createPickupLocatorFieldInstance($field4);
+  createPickupLocatorFieldInstance($field5);
+  createPickupLocatorFieldInstance($field6);
+ */
+}
+
+function createPickupLocatorFieldInstance($field){
+	  // Prepare and create the instance on the bundle.
+	  $tmp = field_info_instance('commerce_customer_profile',$field['field_name'],'shipping'); 
+	if(empty($tmp)){	  
+		  $instance = array(
+			'field_name' => $field['field_name'],
+			'entity_type' => 'commerce_customer_profile',
+			'bundle' => 'shipping',
+			'label' => $field['label'],
+			'description' => $field['description'],
+			'required' => FALSE,
+			'settings' => array(),
+			//'display' => array(
+		//			'default' => array('type' => 'hidden'),
+			//		),
+			'widget' => array(
+				'type' => 'text_textfield',
+				'weight' => 10,
+			),
+			'locked' => FALSE,
+		  );
+
+		  field_create_instance($instance);
+	  }
+}
+
+
+
