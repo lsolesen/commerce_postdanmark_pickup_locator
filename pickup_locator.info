@@ -5,8 +5,6 @@ dependencies[] = commerce
 dependencies[] = commerce_shipping
 core = 7.x
 
-scripts[] = js/pickup.js
-
 configure = admin/commerce/config/shipping/methods/pickup_locator/edit
 
 files[] = pickup_locator.admin.info

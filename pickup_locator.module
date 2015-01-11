@@ -47,28 +47,6 @@ function pickup_locator_menu() {
 	return $items;
 }
 
-
-/**
- * TODO
- * hook_commerce_shipping_service_info();
- * adding new service menu
- */
- 
-/*function commerce_pickup_locator_commerce_shipping_service_info() {
-	$shipping_service = array();
-	$shipping_service = commerce_shipping_services();
-	$shipping_service['tt'] = array(
-		'title' => t('test'),
-		'shipping_method'=>'free_shipping',
-		'calbacks' => array(
-			'rate'=>'test',
-		),
-	); 
-	
-	return $shipping_service;
-}*/
-
-
 function pickup_locator_get_ajax_points(){
 	$postCode = (int)$_GET['post_code'];
 	
@@ -77,25 +55,10 @@ function pickup_locator_get_ajax_points(){
 	drupal_json_output($service_points);
 } 
 
-function pickup_locator_set_ajax_point(){}
-
- /**
- * Access callback: grants users access to the service operations if they
- * have the specific permission or generic shipping permission.
- *
- * @param $op
- *   The operation string: of create, update, or delete.
- *
- * @return
- *   Boolean indicating the user's access.
- */
 function pickup_locator_service_access($op) {
   return user_access('administer shipping');
 }
  
-/**
- * Implements hook_commerce_shipping_method_info().
- */
 function pickup_locator_commerce_shipping_method_info() {
   $shipping_methods = array();
 
@@ -107,25 +70,23 @@ function pickup_locator_commerce_shipping_method_info() {
   return $shipping_methods;
 }
 
-/**
- * Implements hook_commerce_shipping_service_info().
- */
 function pickup_locator_commerce_shipping_service_info() {
   $shipping_services = array();
-
-  $shipping_services['pickup_locator_service'] = array(
-    'title' => t('Danish Post pickup method'),
-    'description' => t('Danish post pickup locator service to find places on the map.'),
-    'display_title' => t('Post Office Pickup'),
-    'shipping_method' => 'pickup_locator_method',
-    'price_component' => 'shipping',
-    'callbacks' => array(
-      'rate' => 'pickup_locator_service_rate',
-      'details_form' => 'pickup_locator_service_details_form',
-      'details_form_validate' => 'pickup_locator_service_details_form_validate',
-      'details_form_submit' => 'pickup_locator_service_details_form_submit',
-    ),
-  );
+	if(variable_get('pickup_locator_license_status', 0)==1) {
+	  $shipping_services['pickup_locator_service'] = array(
+	    'title' => t('Danish Post pickup method'),
+	    'description' => t('Danish post pickup locator service to find places on the map.'),
+	    'display_title' => t('Post Office Pickup'),
+	    'shipping_method' => 'pickup_locator_method',
+	    'price_component' => 'shipping',
+	    'callbacks' => array(
+	      'rate' => 'pickup_locator_service_rate',
+	      'details_form' => 'pickup_locator_service_details_form',
+	      'details_form_validate' => 'pickup_locator_service_details_form_validate',
+	      'details_form_submit' => 'pickup_locator_service_details_form_submit',
+	    ),
+	  );
+	}
 
   return $shipping_services;
 }
@@ -146,17 +107,17 @@ function pickup_locator_form_commerce_checkout_form_alter(&$form, &$form_state) 
 
 	global $user;
 	$postalCode = 0;
-	
-	
 	$order = commerce_cart_order_load($user->uid);
-	$wrapper = entity_metadata_wrapper('commerce_order', $order);
-	
-  if(($wrapper->commerce_customer_shipping->value())){
-	  $shipping_address = $wrapper->commerce_customer_shipping->commerce_customer_address->value();
-	  if($shipping_address){
-			$postalCode = $shipping_address['postal_code'];
+	if($order) {
+		$wrapper = entity_metadata_wrapper('commerce_order', $order);
+		
+	  if(($wrapper->commerce_customer_shipping->value())){
+		  $shipping_address = $wrapper->commerce_customer_shipping->commerce_customer_address->value();
+		  if($shipping_address){
+				$postalCode = $shipping_address['postal_code'];
+		  }
 	  }
-  }
+	}
 
 	$modulePath = drupal_get_path('module', 'pickup_locator');
 	
@@ -179,9 +140,48 @@ function pickup_locator_form_commerce_checkout_form_alter(&$form, &$form_state) 
 	);
 }
 
+function pickup_locator_commerce_order_presave($order) {
+	
+	$order_wrapper = entity_metadata_wrapper('commerce_order', $order);
+	// Loop over all the line items on the order.
+	foreach ($order_wrapper->commerce_line_items as $delta => $line_item_wrapper) {
+    // If the current line item is a shipping line item...
+    if ($line_item_wrapper->type->value() == 'shipping') {
+      // Return its label.
+      $shipping_name = $line_item_wrapper->line_item_label->value();
+			if($shipping_name != 'Post Office Pickup'){
+				clearPickupLocatorFields($order);
+			}
+    }
+	}
+}
+
 /**
  * Shipping service callback: returns the pickup_locator shipping service details form.
  */
+function clearPickupLocatorFields($order) {
+	$order_wrapper = entity_metadata_wrapper('commerce_order', $order);
+	
+  $profile = null;
+	
+	if($order_wrapper->commerce_customer_shipping->value()){
+    $profile = commerce_customer_profile_load($order_wrapper->commerce_customer_shipping->profile_id->value());
+  }
+	if($profile){
+		$profile_wrapper = entity_metadata_wrapper('commerce_customer_profile', $profile);
+
+		if (!empty($profile_wrapper)) {
+			$profile_wrapper->pickup_service_point_id->set(null);
+			$profile_wrapper->pickup_service_point_id_name->set(null);
+			$profile_wrapper->pickup_service_point_id_address->set(null);
+			$profile_wrapper->pickup_service_point_id_city->set(null);
+			$profile_wrapper->pickup_service_point_id_postcode->set(null);
+			$profile_wrapper->pickup_postnord_country->set(null);
+			$profile_wrapper->save();
+		}
+	}
+} 
+ 
 function pickup_locator_service_details_form($pane_form, $pane_values, $checkout_pane, $order, $shipping_service) {
 
   $form = array();
@@ -217,7 +217,7 @@ function pickup_locator_service_details_form($pane_form, $pane_values, $checkout
 		'pickup_service_point_id_postcode',
 		'pickup_postnord_country'
   );
-  foreach ( $serviceFields as $f){
+  foreach ( $serviceFields as $f ){
 	   $form[$f] = array(
 	    '#type' => 'hidden',
 	    '#title' => t(''),
@@ -236,16 +236,14 @@ function pickup_locator_service_details_form($pane_form, $pane_values, $checkout
 		'#attributes' => array ('readonly'=>'readonly'),
 		'#weight' => 0,
 	  '#required' => TRUE,
-		'#suffix' => getMapHtml(($servicePoints ? $servicePoints['radio_html'] : null)) . '<img id="sogLoader" style="display:inline" src="'.base_path().$modulePath . '/images/loading.gif'.'" />'.
-								'<input alt="#TB_inline?inlineId=showMap"'. 
+		'#suffix' => getMapHtml() . '<div class="pickuplocator-form"><img id="sogLoader" style="display:inline" src="'.base_path().$modulePath . '/images/loading.gif'.'" />'.
+								'<input alt="#TB_inline?inlineId=showMap" '. 
 								'style="display:none;float: none;" class="form-button checkout-processed" 0="" type="button"'.
 								' id="edit-commerce-shipping-service-details-find-location" name="'.t('Find Pickup location').'" value="'.t('Find Pickup location').'"/>'.	
 								'<script> 
 										var pickup = new PickupLocator();
-								</script>',
-);
-
-//ADDING Javascript files  
+								</script></div>',
+	);
 
 	$form['#attached']['css'][] = array(
 			'data' => $modulePath . '/css/modal.css', 
@@ -268,7 +266,9 @@ function pickup_locator_service_details_form($pane_form, $pane_values, $checkout
 function pickup_locator_service_details_form_validate($details_form, $details_values, $shipping_service, $order, $form_parents) {
 
   if (strlen($details_values['pickup_location']) < 2) {
-    form_set_error(implode('][', array_merge($form_parents, array('find_location'))), t('Pickup location missing, please click "'.$details_form['find_location']['#value'] .'" button to set it.'));
+    form_set_error(implode('][', array_merge(
+    	$form_parents, array('find_location'))
+		), t('Pickup location missing, please click "'.$details_form['find_location']['#value'] .'" button to set it.'));
 
     // Even though the form error is enough to stop the submission of the form,
     // it's not enough to stop it from a Commerce standpoint because of the
@@ -296,41 +296,31 @@ function pickup_locator_form_alter(&$form, &$form_state, $form_id) {
 		//review form
 	}
 }
-function pickup_locator_commerce_checkout_page_info_alter (&$checkout_pages) {
-	//$checkout_pages = commerce_checkout_commerce_order_state_info();
-	//print_r($checkout_pages);
-	//die();
-}
-
 
 /**
  * Shipping service callback: increases the shipping line item's unit price if
  * express delivery was selected.
  */
-function pickup_locator_service_details_form_submit($details_form, $details_values, $line_item) {
-	
-	global $user;
-	
-	
-	$order = commerce_cart_order_load($user->uid);
-	 
-	$order_wrapper = entity_metadata_wrapper('commerce_order', $order);
 
+function pickup_locator_service_details_form_submit($details_form, $details_values, $line_item) {
+	global $user;
+	$order = commerce_cart_order_load($user->uid);
+	
+	
+	
+	$order_wrapper = entity_metadata_wrapper('commerce_order', $order);
 	
   $profile = null;
-  if($order_wrapper->commerce_customer_billing->value()){
-    $profile = commerce_customer_profile_load($order_wrapper->commerce_customer_billing->profile_id->value());
-  }else if($order_wrapper->commerce_customer_shipping->value()){
+	
+	if($order_wrapper->commerce_customer_shipping->value()){
     $profile = commerce_customer_profile_load($order_wrapper->commerce_customer_shipping->profile_id->value());
   }
 	if($profile){
-	//	$profile_id = $order_wrapper->commerce_customer_shipping->profile_id->value();
+		$profile_wrapper = entity_metadata_wrapper('commerce_customer_profile', $profile);
+
+		if (!empty($profile_wrapper)) {
+			$profile_wrapper->pickup_service_point_id->set('kldjalkdaj');
 			
-
-		// load customer profile
-		//$profile = commerce_customer_profile_load($profile_id);
-		if ($profile_wrapper = entity_metadata_wrapper('commerce_customer_profile', $profile)) {
-
 			$profile_wrapper->pickup_service_point_id->set($details_form['pickup_service_point_id']['#value']);
 			$profile_wrapper->pickup_service_point_id_name->set($details_form['pickup_service_point_id_name']['#value']);
 			$profile_wrapper->pickup_service_point_id_address->set($details_form['pickup_service_point_id_address']['#value']);
@@ -340,7 +330,6 @@ function pickup_locator_service_details_form_submit($details_form, $details_valu
 			$profile_wrapper->save();
 		}
 	}
-
 }
 
 /**
@@ -355,125 +344,236 @@ function pickup_locator_commerce_price_component_type_info() {
   );
 }
 
+function isValidPostcode($postCode) {
+	 if (strlen((int) $postCode) == 4)
+	 	return true;
+	 else
+	 	return false;
+}
+
+function isValidApiKey($apiKey) {
+	 if (strlen($apiKey) > 1 )
+	 	return true;
+	 else
+	 	return false;
+}
+
+function getValidPickupDays() {
+	$validDays = "MO,TU,WE,TH,FR,SA,SU";
+	return explode(',', $validDays);
+}
+
+function getDayBefore($day) {
+	$pickupDays = getValidPickupDays();
+	$key = array_search($day,$pickupDays);
+	return $pickupDays[$key-1];
+}
+
+function changePickupDayToUniversalDayOfWeekName($day) {
+	$dowMap = array('Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat','Sun');
+	$pickupDays = getValidPickupDays();
+	$key = array_search($day,$pickupDays);
+	return $dowMap[$key];
+}
+
+function formatOpeningHours($dayFrom, $dayTo, $openFrom, $openTo) {
+	
+	$pickupDays = getValidPickupDays();
+	
+	$openFrom = date("H:i",
+		strtotime(substr($openFrom, 0, 2) . ":" . substr($openFrom, 2)));
+	$openTo = date("H:i",
+		strtotime(substr($openTo, 0, 2) . ":" . substr($openTo, 2)));
+	$openingTime = "$openFrom - $openTo";
+	$dayFrom = format_date(strtotime(changePickupDayToUniversalDayOfWeekName($dayFrom)),'custom','D');
+	$dayTo = format_date(strtotime(changePickupDayToUniversalDayOfWeekName($dayTo)),'custom','D');
+	return "<strong>$dayFrom-$dayTo:</strong> $openingTime";
+}
+
+function getOpeningHoursRangeForEachDay($pointOpeningHours) {
+	if(empty($pointOpeningHours))
+		return array();
+	
+	$isHoursChanged = false;
+	$dayFrom = "MO";
+	$dayTo = "MO";
+	$openFrom = $pointOpeningHours[0]->from1;
+	$openTo = $pointOpeningHours[0]->to1;
+	$openingHours = array();
+	
+	foreach($pointOpeningHours as $openingHour) {
+		if($openFrom != $openingHour->from1) {
+			$openFrom = $openingHour->from1;
+			$isHoursChanged = true;
+		}
+		
+		if($openTo != $openingHour->to1) {
+			$openTo = $openingHour->to1;
+			$isHoursChanged = true;
+		}
+		
+		if($isHoursChanged) {
+			$openingHoursRange = array(
+				'dayRange' => "$dayFrom-$dayTo",
+				'hourRange' =>"$openFrom - $openTo",
+			);
+			
+			$dayTo = $openingHour->day;
+			
+			if($dayTo != "MO") {
+				$dayTo = getDayBefore($dayTo);
+			}
+			
+			$dayFrom = ucwords($dayFrom);
+			$dayTo = ucwords($dayTo);
+			
+			$openingHours[] = formatOpeningHours($dayFrom, $dayTo, $openFrom, $openTo);
+			
+			$dayFrom = $openingHour->day;
+			
+			$isHoursChanged = false;
+		}
+	}
+	return $openingHours;
+}
+
+function getOpeningHoursFormServicePoint($point) {
+	 return getOpeningHoursRangeForEachDay($point->openingHours);
+}
     //Get postnord
 function getPostnordServicePoints($postcode) {
-		
 		$api_key = variable_get('pickup_locator_api','');
 		$country_code = 'DK';
-		$numberOfServicePoints = 20;
+		$numberOfServicePoints = 12;
 		$google_map = 'yes';
-        if (strlen((int) $postcode) == 4 && strlen($api_key) > 1 ){
 		
-            $url = "http://api.postnord.com/wsp/rest/BusinessLocationLocator" .
-                    "/Logistics/ServicePointService_1.0/findNearestByAddress.json?" .
-                    "consumerId=" . trim($api_key) .
-                    "&countryCode=" . trim($country_code) .
-                    "&postalCode=" . trim($postcode) . '&numberOfServicePoints='.$numberOfServicePoints;
+    if (!isValidPostcode($postcode)){
+    	return array('error' => t('Format of post code is invalid'));
+		}
+		
+		if(!isValidApiKey($api_key)) {
+    	return array('error' => t('Api key is empty. You must insert api key in module configuration menu'));
+		}
+		
+    $url = "http://api.postnord.com/wsp/rest/BusinessLocationLocator" .
+            "/Logistics/ServicePointService_1.0/findNearestByAddress.json?" .
+            "consumerId=" . trim($api_key) .
+            "&countryCode=" . trim($country_code) .
+            "&postalCode=" . trim($postcode) . '&numberOfServicePoints='.$numberOfServicePoints;
 
-            $curl = curl_init();
-            curl_setopt($curl, CURLOPT_URL, $url);
-            curl_setopt($curl, CURLOPT_HEADER, 0);
-            curl_setopt($curl, CURLOPT_RETURNTRANSFER, 1);
-            $jsonFile = curl_exec($curl);
-            curl_close($curl);
+    $curl = curl_init();
+    curl_setopt($curl, CURLOPT_URL, $url);
+    curl_setopt($curl, CURLOPT_HEADER, 0);
+    curl_setopt($curl, CURLOPT_RETURNTRANSFER, 1);
+    $jsonFile = curl_exec($curl);
+    curl_close($curl);
 
-            $data = json_decode($jsonFile);
+    $data = json_decode($jsonFile);
 			
-            if ($data) {
-                if ($google_map == 'yes') {
-                    $post_addresses['radio_html'] = GetPickupLocationsResult($postcode, $data);
+    if (!$data) {
+    	return array('error' => t('Service error'));
+		}
+			
+    if ($google_map == 'yes') {
+      $points = $data->servicePointInformationResponse->servicePoints;
+		
+    	if(empty($points)) {
+	    	return array('error' => t('No service points found in that area'));
+    	}
 
-                    $points = $data->servicePointInformationResponse->servicePoints;
+      $post_addresses['radio_html'] = GetPickupLocationsResult($postcode, $data);
 
-                    $addresses = array();
-                    $name = array();
-                    $number = array();
-                    $generate = array();
-                    $opening = array();
-                    $close = array();
-                    $opening_sat = array();
-                    $close_sat = array();
-                    $lat = array();
-                    $lng = array();
-                    $key = 1;
-					$servicePointId = array();
+      $addresses = array();
+      $name = array();
+      $number = array();
+      $generate = array();
+      $opening = array();
+      $close = array();
+      $opening_sat = array();
+      $close_sat = array();
+      $lat = array();
+      $lng = array();
+      $key = 1;
+			$servicePointId = array();
+      foreach ($points as $key => $point) {
+        if ($point->visitingAddress->streetName) {
+    			$streetName = isset($point->visitingAddress->streetName)?$point->visitingAddress->streetName:'';
+    			$streetNumber = isset($point->visitingAddress->streetNumber)?$point->visitingAddress->streetNumber:null;
+			
+					$point->visitingAddress->streetName;
+          $addresses[] = $streetName . ' ' . $streetNumber;
+          $name[] = $point->name;
 					
-                    if (!empty($points)) {
-                        foreach ($points as $key => $point) {
-                            if ($point->visitingAddress->streetName) {
-                                $addresses[] = $point->visitingAddress->streetName . ' ' . $point->visitingAddress->streetNumber;
-                                $name[] = $point->name;
-								if(isset($point->openingHours[0]))
-									$opening[] = $point->openingHours[0]->from1;
-								if(isset($point->openingHours[0]))
-									$close[] = $point->openingHours[0]->to1;
-								if(isset($point->openingHours[5]))
-									$opening_sat[] = $point->openingHours[5]->from1;
-								if(isset($point->openingHours[5]))
-									$close_sat[] = $point->openingHours[5]->to1;
-                                $lat[] = $point->coordinate->northing;
-                                $lng[] = $point->coordinate->easting;
-                                $number[] = $point->deliveryAddress->postalCode . ' ' . $point->deliveryAddress->city;
-                                $servicePointId[] = $point->servicePointId;
-								if(isset($generate[$point->servicePointId]) && isset($point->openingHours[0]))
-									$generate[$point->servicePointId] = $point->deliveryAddress->streetName . ' ' . $point->deliveryAddress->streetNumber . ',' . $point->name . ',' . $point->deliveryAddress->postalCode . ' ' . $point->deliveryAddress->city . ',' . ($key) . ',' . $point->openingHours[0]->from1 . ',' . $point->openingHours[0]->to1 . ',' . $point->openingHours[5]->from1 . ',' . $point->openingHours[5]->to1 . ',' . $point->coordinate->northing . ',' . $point->coordinate->easting;
+					if(isset($point->openingHours[0]))
+						$opening[] = $point->openingHours[0]->from1;
+					
+					if(isset($point->openingHours[0]))
+						$close[] = $point->openingHours[0]->to1;
+					
+					if(isset($point->openingHours[5]))
+						$opening_sat[] = $point->openingHours[5]->from1;
+					
+					if(isset($point->openingHours[5]))
+						$close_sat[] = $point->openingHours[5]->to1;
+					
+          $lat[] = $point->coordinate->northing;
+          $lng[] = $point->coordinate->easting;
+          $number[] = $point->deliveryAddress->postalCode . ' ' . $point->deliveryAddress->city;
+          $servicePointId[] = $point->servicePointId;
+					
+					if(isset($generate[$point->servicePointId]) && isset($point->openingHours[0]))
+						$generate[$point->servicePointId] = $point->deliveryAddress->streetName . ' ' . $point->deliveryAddress->streetNumber . ',' . $point->name . ',' . $point->deliveryAddress->postalCode . ' ' . $point->deliveryAddress->city . ',' . ($key) . ',' . $point->openingHours[0]->from1 . ',' . $point->openingHours[0]->to1 . ',' . $point->openingHours[5]->from1 . ',' . $point->openingHours[5]->to1 . ',' . $point->coordinate->northing . ',' . $point->coordinate->easting;
 
-                                $key++;
-                            }
-                        }
-                    }
-
-                    $post_addresses['addresses'] = $addresses;
-                    $post_addresses['name'] = $name;
-                    $post_addresses['number'] = $number;
-                    $post_addresses['generate'] = $generate;
-                    $post_addresses['opening'] = $opening;
-                    $post_addresses['close'] = $close;
-                    $post_addresses['opening_sat'] = $opening_sat;
-                    $post_addresses['close_sat'] = $close_sat;
-                    $post_addresses['lat'] = $lat;
-                    $post_addresses['lng'] = $lng;
-                    $post_addresses['servicePointId'] = $servicePointId;
-                } else {
-                    $points = $data->servicePointInformationResponse->servicePoints;
-
-                    $addresses = array();
-                    $servicePointId = array();
-                    $key = 1;
-
-                    if (!empty($points)) {
-                        foreach ($points as $key => $point) {
-                            if ($point->visitingAddress->streetName) {
-                                $addresses[] = $point->visitingAddress->streetName . ' ' . $point->visitingAddress->streetNumber;
-                                $servicePointId[] = $point->servicePointId;
-
-                                $key++;
-                            }
-                        }
-                    }
-
-                    $post_addresses['addresses'] = $addresses;
-                    $post_addresses['servicePointId'] = $servicePointId;
-                }
-				
-                return $post_addresses;
-            } else {
-                $post_addresses['error'] = 'Der er desvarre ingen Post Danmark udleveringssted i det onskede postnummer.';
-                return $post_addresses;
-            }
+          $key++;
         }
+      }
+
+      $post_addresses['addresses'] = $addresses;
+      $post_addresses['name'] = $name;
+      $post_addresses['number'] = $number;
+      $post_addresses['generate'] = $generate;
+      $post_addresses['opening'] = $opening;
+      $post_addresses['close'] = $close;
+      $post_addresses['opening_sat'] = $opening_sat;
+      $post_addresses['close_sat'] = $close_sat;
+      $post_addresses['lat'] = $lat;
+      $post_addresses['lng'] = $lng;
+      $post_addresses['servicePointId'] = $servicePointId;
+  	} else {
+      $points = $data->servicePointInformationResponse->servicePoints;
+
+      $addresses = array();
+      $servicePointId = array();
+      $key = 1;
+
+      if (!empty($points)) {
+          foreach ($points as $key => $point) {
+              if ($point->visitingAddress->streetName) {
+                  $addresses[] = $point->visitingAddress->streetName . ' ' . $point->visitingAddress->streetNumber;
+                  $servicePointId[] = $point->servicePointId;
+
+                  $key++;
+              }
+          }
+      }
+
+      $post_addresses['addresses'] = $addresses;
+      $post_addresses['servicePointId'] = $servicePointId;
+    }
+    return $post_addresses;
 }
 
 function GetPickupLocationsResult($zip, $data) {
-  
+		$MAX_SHOPS_NUMBER = 15;
+  	$shopCount = 0;
 		$google_map = 'yes';
 		
         $response = '';
         $shops = $data->servicePointInformationResponse->servicePoints;
 
         if (!isset($shops) || sizeof($shops) == 0) {
-            $response .= '<span class="postnord-error" id="postnord-error">Postnummeret er ikke korrekt.</span><br/>';
-            $response .= '<input type="hidden" name="postnord_pickupLocation" id="location" class="postnord_location">';
+            // $response .= '<span class="postnord-error" id="postnord-error">Postnummeret er ikke korrekt.</span><br/>';
+            // $response .= '<input type="hidden" name="postnord_pickupLocation" id="location" class="postnord_location">';
         } else {
             if ($google_map == 'yes') {
                 $response .= '<div class="postnord-choose"><strong>Vælg et afhentningssted:</strong></div>';
@@ -483,19 +583,21 @@ function GetPickupLocationsResult($zip, $data) {
             $response .= '<ul id="mapAddress">';
             $checked = ' CHECKED';
             if (sizeof($shops) == 1) {
-                $response .= createShop($shops[0], $checked);
-            } else {
-                $checked = ' CHECKED';
-                $cnt = 0;
-                $count = count($shops);
-                foreach ($shops as $key => $shop) {
-                    $response .= createShop($shop, $checked, $cnt, $count);
-                    $cnt++;
-                    $checked = '';
-                }
+        		} else {
+              $checked = ' CHECKED';
+              $cnt = 0;
+              $count = count($shops);
+              foreach ($shops as $key => $shop) {
+	          		if($cnt < $MAX_SHOPS_NUMBER) {
+	                $response .= createShop($shop, $checked, $cnt, $count);
+	          		}
+//                $response .= createShop($shop, $checked, $cnt, $count);
+                $cnt++;
+                $checked = '';
+              }
             }
 
-            $response .= '<ul>';
+            $response .= '<div class="clearfix"></div></ul>';
         }
 
         return $response;
@@ -503,26 +605,44 @@ function GetPickupLocationsResult($zip, $data) {
 
 function createShop($shop, $checked, $key, $count) {
   ++$key;
-  $response = '<li>';
 	
-  if ($count == $key)
-    $response .= '<input type="radio" id="place_' . trim($shop->servicePointId) . '" value="' . trim($shop->servicePointId) . '" name="postnord_pickupLocation" class="radio validate-one-required-by-name" />';
-  else
-    $response .= '<input type="radio" id="place_' . trim($shop->servicePointId) . '" value="' . trim($shop->servicePointId) . '" name="postnord_pickupLocation" class="radio" />';
-
-	$response .= $key . '. ';
-	$response .= '<label for="place_'. trim($shop->servicePointId) . '">';
-	$response .= '<strong>' . trim($shop->name) .'</strong>';
-	$response .= 
-	trim($shop->deliveryAddress->streetName) 	. ' ' . 
-	trim($shop->deliveryAddress->streetNumber). ' ' .
-	trim($shop->deliveryAddress->city) 				. '<input type="hidden" class="service_postcode" value="' .
-	trim($shop->deliveryAddress->postalCode) 	. '" />';
-	$response .= '</label>';
+	$servicePointId = isset($shop->servicePointId)?$shop->servicePointId:null;
+	$deliveryName = isset($shop->name)?$shop->name:'';
+	$deliveryStreetName = isset($shop->deliveryAddress->streetName)?$shop->deliveryAddress->streetName:'';
+	$deliveryStreetNumber = isset($shop->deliveryAddress->streetNumber)?$shop->deliveryAddress->streetNumber:'';
+	$deliveryCity = isset($shop->deliveryAddress->city)?$shop->deliveryAddress->city:'';
+	$deliveryPostcode = isset($shop->deliveryAddress->postalCode)?$shop->deliveryAddress->postalCode:0;
+	$openingHours = getOpeningHoursFormServicePoint($shop);
+	
+  $response = '<li>';
+	  if ($count == $key)
+	    $response .= '<input type="radio" id="place_' . trim($servicePointId) . '" value="' . trim($servicePointId) . '" name="postnord_pickupLocation" class="radio validate-one-required-by-name" />';
+	  else
+	    $response .= '<input type="radio" id="place_' . trim($servicePointId) . '" value="' . trim($servicePointId) . '" name="postnord_pickupLocation" class="radio" />';
+	
+		$response .= '<div class="pickup-address">';
+			$response .= '<p>' . $key . '.</p>';
+			$response .= '<label for="place_'. trim($servicePointId) . '">';
+				$response .= '<strong class="servicepoint-name">' . trim($deliveryName) .'</strong>';
+				$response .= '<span class="servicepoint-street">';
+					$response .= trim($deliveryStreetName) 	. ' '; 
+					$response .= trim($deliveryStreetNumber). ' ';
+				$response .= '</span>';
+				$response .= '<span class="servicepoint-city">';
+					$response .= 	trim($deliveryCity);
+				$response .= '</span>';
+				$response .= '<span class="servicepoint-opening-block">';
+					foreach($openingHours as $slot) {
+						$response .= "<span class='servicepoint-opening'>$slot</span>";
+					}
+				$response .= '</span>';
+			$response .= '</label>';
+			$response .= '<input type="hidden" class="servicepoint-postcode" value="' . trim($deliveryPostcode) 	. '" />';
+		$response .= '</div>';
 	$response .= '</li>';
 
-	if ($key % 4 == 0)
-		$response .= '<div class="clear"></div>';
+	// if ($key % 4 == 0)
+		// $response .= '<div class="clear"></div>';
 		
 	return $response;
 }
@@ -564,7 +684,6 @@ function getMapHtml($radioHtml = null) {
 			$googleMapContent .= '            height: 20px';
 			$googleMapContent .= '        }';
 			$googleMapContent .= '    </style>';
-			$googleMapContent .= '    <div id="map_canvas" style="height: 350px; width: 780px; position: relative; margin-top: 20px;"></div><div id="pickupLocations" class="pickupLocation-container"><div id="map-button-save" style="cursor: pointer; float: right; padding: 2px 5px; font-weight:bold; border: 1px solid #000; background:#ccc;"><span><span>Afslut og Gem</span></span></div><div id="locator_map_radio_html">'.($radioHtml ? $radioHtml : '').'</div><div class="clear"></div><div class="buttons-container"><div id="map-button-save2" style="cursor: pointer; float: right; padding: 2px 5px; font-weight:bold; border: 1px solid #000; background:#ccc;"><span><span>Afslut og Gem</span></span></div></div>';
 			$googleMapContent .= '</div></div></div>';
 			
 	return $googleMapContent;

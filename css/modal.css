@@ -1,10 +1,167 @@
 #simplemodal-overlay {
-	background-repeat: #000;
+	background: #000;
 }
 .modalCloseImg.simplemodal-close {
 	background: transparent url('tb-close.png') no-repeat right;
 	width: 15px;
 	height: 15px;
-	display: block;
+	display: none;
 	float: right;
+}
+#simplemodal-container{
+	box-shadow: rgb(255, 255, 255) 2px 4px 30px 3px;
+}
+#simplemodal-container > .simplemodal-wrap {
+	border: 2px solid #ed1b2e;
+	padding-bottom: 6px;
+}
+#postnord-logo {
+	background: url('../images/postnord_logo.png');
+	width: 100px;
+	height: 29px;
+	position: absolute;
+	z-index: 2;
+	right: 25px;
+	top: 30px;
+}
+#modal_sogloader {
+	background: url("../images/loading.gif");
+	width: 100px;
+	height: 15px;
+	position: absolute;
+	top: 50%;
+	left: 50%;
+	margin-top: -8px;
+	margin-left: -53px;
+	z-index: 100;
+}
+#pickup_place_list .postnord-choose > strong {
+	margin-left: 19px;
+	font-size: 12px;
+	line-height: 35px;
+}
+#pickup_place_list .pickup_reset_button:hover,
+#pickup_place_list .pickup_submit_button:hover {
+	color: #FFF;
+}
+#pickup_place_list .pickup_reset_button,
+#pickup_place_list .pickup_submit_button{
+	background: #ed1b2e;
+	color: #FFF;
+	width: 60px;
+	height: 24px;
+	text-align: center;
+	border-radius: 15px;
+	margin: 0 5px;
+	float: right;
+	display: inline-block;
+	line-height: 24px;
+	font-size: 12px;
+	margin-top: 5px;
+}
+#pickup_place_list .pickup_submit_button{
+	margin-right: 10px;
+}
+#pickup_place_list {
+	padding: 0 2px;
+}
+#map_canvas img {
+	max-width: none;
+}
+#mapAddress li input[type='radio']{
+	display: none;
+}
+#mapAddress li p {
+	margin: 0;
+	float: left;
+}
+#mapAddress li label {
+	font-weight: normal;
+	margin-left: 20px;
+}
+#mapAddress li label strong {
+	display: block;
+}
+#mapAddress {
+	background: url("../images/line.png");
+	margin: 2px 0;
+	padding-bottom: 1px;
+}
+ul#mapAddress li {
+	display: block;
+	float: left;
+	margin-left: 4%;
+	width: 21%;
+	min-width: 175px;
+	margin-bottom: 15px;
+}
+ul#mapAddress li label:hover {
+	cursor: pointer;
+}
+#pickup_place_list ul#mapAddress li {
+	display: block;
+	float: left;
+	height: 75px;
+	margin-left: 2%;
+	width: 18%;
+	min-width: 170px;
+	margin-bottom: 0;
+	margin-top: 10px;
+}
+.pickup-address {
+	font-size: 10px;
+	max-height: 84px;
+	overflow: hidden;
+	padding: 6px;
+}
+.pickup-address > p {
+	font-weight: 700;
+}
+.pickup-address.isSelected {
+	background: #ed1b2e;
+	display: block;
+	border-radius: 10px;
+	color: #FFF;
+}
+.servicepoint-opening-block {
+	display: none;
+}
+.servicepoint-opening {
+	display: block;
+}
+.gm-style-iw strong {
+	color: #ed1b2e;
+}
+
+.servicepoint-city {
+	display: block;
+}
+#error_checked_radio {
+	color: #ed1b2e;
+}
+
+#simplemodal-data > div.messages.error {
+	position: absolute;
+	top: 0;
+	left: 0;
+	right: 0;
+	width: 190px;
+	margin: 0 auto;
+	margin-top: -18px;
+	cursor: pointer;
+}
+
+.postcode {
+	position: absolute;
+	top: 0;
+	width: 100%;
+	text-align: center;
+	margin-top: -10px;
+}
+
+#postcode-input {
+	border: 2px red solid;
+	width: 220px;
+	padding: 14px 5px;
+	font-size: 15px;
 }

@@ -4,16 +4,42 @@ function initMaps()
   pickup.initMap(servPoints);
 }
 
+getDrupalFormattedMessage = function(message, type){
+	if(type==undefined)
+		type = 'error';
+		
+	return '<div class="messages '+ type +'">'+
+					'<h2 class="element-invisible">Error message</h2>'
+					+ message +
+					'</div>';	
+};
+
 function PickupLocator(){
 	var $ = jQuery,
 			postCode = $("#pickup_postCode").length > 0?$("#pickup_postCode").val():0,
-			googleMapAPILoaded = 0;
+			googleMapAPILoaded = 0,
+			areServicePointsLoaded = false;
+	
+	var clearPickupInputFields = function() {
+		$("input[name*='commerce_shipping[service_details][pickup_service_point']").val(null);
+	};
+	//delete pickuplocator-form if exist
+	$('#commerce-shipping-service-ajax-wrapper input[type="radio"]').change(function(){
+		if($('#commerce-shipping-service-ajax-wrapper input[type="radio"]').is(':checked')) {
+			if($('.pickuplocator-form').length > 0) {
+				clearPickupInputFields();
+				$('.pickuplocator-form').remove();
+			}
+		} 
+	});
 			
 	var loaderShow = function(){
+		jQuery('#modal_sogloader').show();
 		jQuery('#sogLoader').show();
 	};
 	
 	var loaderHide = function(){
+		jQuery('#modal_sogloader').hide();
 		jQuery('#sogLoader').hide();
 	};
 	
@@ -25,25 +51,129 @@ function PickupLocator(){
 		jQuery('#edit-commerce-shipping-service-details-find-location').hide();
 	};
 	
-	var addPickupList = function(htmlPoints){
-		jQuery('#locator_map_radio_html').html(htmlPoints);
-	};		
-	
 	this.initMap = function(servPoints){
 		maps = new Maps();
-		
-		if(servPoints == undefined) {
-			servPoints = servicePoints;
-		}
 		
 	  if (servPoints.addresses && servPoints.addresses.length>0) {
 	    maps.initializeMap(servPoints.addresses, servPoints.name, servPoints.number, servPoints.opening, servPoints.close, servPoints.opening_sat, servPoints.close_sat, servPoints.lat, servPoints.lng, servPoints.servicePointId);
 	  }
-	  console.log(maps);
 	};
 	
+	var printPickupListOnModal = function(htmlPoints){
+		jQuery('#pickup_place_list').html(htmlPoints);
+		jQuery('#pickup_place_list').append('<div class="clearfix"></div>');
+	};		
+	
+	var printSubmitButtons = function() {
+		var cancelButton 	= "<a href='javascript:void(0)' class='pickup_reset_button'>Fortryd</a>";
+		var okButton 			= "<a href='javascript:void(0)' class='pickup_submit_button'>Ok</a>";
+		
+		$("#pickup_place_list").prepend(cancelButton);
+		$("#pickup_place_list").prepend(okButton);
+		
+		$("#pickup_place_list").append(okButton);
+		$("#pickup_place_list").append(cancelButton);
+	};
+	
+	var isServicePointChecked = function(){
+		return jQuery('input[name="postnord_pickupLocation"]').is(':checked');
+	};
+	
+	var showServicePointNotCheckedError = function(){
+		if (jQuery('#error_checked_radio').length == 0) {
+			jQuery('.pickup_submit_button').before('<span id="error_checked_radio">'+Drupal.t("Please select one of the options.")+'</span>');
+		}
+	};
+	
+	var removeServicePointNotCheckedError = function(){
+		if (jQuery('#error_checked_radio').length > 0) {
+			jQuery('#error_checked_radio').remove();
+		}
+	};
+	
+	var setServicePointHiddenInputs = function() {
+		var servicePointID = jQuery('input[name="postnord_pickupLocation"]:checked').val();
+		var servicePointHtmlID = '#place_' + servicePointID;
+		var $servicePointElement = $(servicePointHtmlID).parent();
+		var servicePointName = $servicePointElement.find('.servicepoint-name').html();
+		var servicePointStreet = $servicePointElement.find('.servicepoint-street').html();
+		var servicePointCity = $servicePointElement.find('.servicepoint-city').html();
+		var servicePointPostCode = $servicePointElement.find('.servicepoint-postcode').val();
+		
+		jQuery('#edit-commerce-shipping-service-details-pickup-location').val(servicePointName);
+		
+		jQuery('input[name=\'commerce_shipping[service_details][pickup_service_point_id]\']').val(servicePointID);
+		jQuery('input[name=\'commerce_shipping[service_details][pickup_service_point_id_name]\']').val(servicePointName);
+		jQuery('input[name=\'commerce_shipping[service_details][pickup_service_point_id_address]\']').val(servicePointStreet);
+		jQuery('input[name=\'commerce_shipping[service_details][pickup_service_point_id_city]\']').val(servicePointCity);
+		jQuery('input[name=\'commerce_shipping[service_details][pickup_service_point_id_postcode]\']').val(servicePointPostCode);
+		jQuery('#edit-customer-profile-shipping-commerce-customer-address-und-0-thoroughfare').val(servicePointStreet);
+		jQuery('#edit-customer-profile-shipping-commerce-customer-address-und-0-locality').val(servicePointCity);
+	};
+	
+	function attachOkButtonEvent() {
+		jQuery('.pickup_submit_button').click(function() {
+			if (!isServicePointChecked()) {
+				showServicePointNotCheckedError(); 
+			} 
+			else {
+				removeServicePointNotCheckedError();
+				setServicePointHiddenInputs();
+				jQuery.modal.close();
+			}
+		});
+	}
+	
+	var attachCancelButtonEvent = function() {
+		$(".pickup_reset_button").click(function(){
+			$.modal.close();
+		});
+	};
+	
+	var printResultsNotFoundOnModal = function() {
+		console.log('results not found');
+	};
+	
+	var isPostcodeInputExists = function() {
+		var $postcodeInput = $('input[name="commerce_shipping[service_details][pickup_service_point_id_postcode]"]');
+		if($postcodeInput.length > 0)
+			return true;
+		else
+			return false;
+	};
+	
+	var getPostcodeInputVal = function() {
+		return $('input[name="pickup_locator_postCode"').val();
+	};
+	
+	var isPostcodeValidFormat = function() {
+		if(postCode.toString().length != 4)
+			return true;
+		else
+			return false;
+	};
+	
+	var printErrorOnModal = function(message) {
+		var errorBody = getDrupalFormattedMessage(message,'error');
+		if(message !='')
+			$("#simplemodal-data").append(errorBody);
+		$('#simplemodal-data .messages').live('click',function() {
+			$(this).hide();
+		});
+	};
+		
+	var errorCache = '';
 	var getServicePointsByAjax = function() {
-		if(postCode && postCode.toString().length == 4) {
+		if(!postCode) {
+			if(isPostcodeInputExists())
+			postCode = getPostcodeInputVal();
+		}
+		
+		if(!isPostcodeValidFormat) {
+			//showWrongPostcodeInModal();
+		}
+		
+		if(!googleMapAPILoaded) {
 			jQuery.ajax( {
 				type: 'GET',
 				url: Drupal.settings.basePath+'ajax/load_service_points',
@@ -52,56 +182,81 @@ function PickupLocator(){
 				success: (function(response){
 					if(typeof response =='object')
 					{
+						if(response.error != undefined) {
+							googleMapAPILoaded = 1;
+							printErrorOnModal(response.error);
+							errorCache = response.error;
+							loaderHide();
+							buttonShow();
+							return;
+						}
+						
 						servPoints = response;
-						if(!googleMapAPILoaded) {
-							jQuery.getScript('https://maps.googleapis.com/maps/api/js?v=3.exp&sensor=false&callback=initMaps', function() {
-								googleMapAPILoaded = 1;
-							});
-						}
-						else {
-							this.initMaps(response);
-						}
 						
-						addPickupList(response.radio_html);
-						
-						loaderHide();
-						buttonShow();
-					}
+						jQuery.getScript('https://maps.googleapis.com/maps/api/js?v=3.exp&sensor=false&callback=initMaps', function() {
+							googleMapAPILoaded = 1;
+							printPickupListOnModal(response.radio_html);
+							printSubmitButtons();
+							attachOkButtonEvent();
+							attachCancelButtonEvent();
+							
+							loaderHide();
+							buttonShow();
+						});
+					} 
 				}),
-			});
-			return response;
-		}
+				});
+			} else {
+				//maps are already loded
+				
+				if(!areServicePointsLoaded) {
+					jQuery.ajax( {
+					type: 'GET',
+					url: Drupal.settings.basePath+'ajax/load_service_points',
+					dataType: 'json',
+					data: 'post_code='+postCode,
+					success: (function(response){
+						if(typeof response =='object')
+						{
+								if(response.error != undefined) {
+									googleMapAPILoaded = 1;
+									printErrorOnModal(response.error);
+									errorCache = response.error;
+									loaderHide();
+									buttonShow();
+									return;
+								}
+								
+								areServicePointsLoaded = true;
+								
+								servPoints = response;
+								
+								printErrorOnModal(errorCache);
+								initMaps(servPoints);
+								printPickupListOnModal(servPoints.radio_html);
+								printSubmitButtons();
+								attachOkButtonEvent();
+								attachCancelButtonEvent();
+								
+								loaderHide();
+								buttonShow();	
+						}
+					}),
+					});
+				} else {
+					printErrorOnModal(errorCache);
+					initMaps(servPoints);
+					printPickupListOnModal(servPoints.radio_html);
+					printSubmitButtons();
+					attachOkButtonEvent();
+					attachCancelButtonEvent();
+					
+					loaderHide();
+					buttonShow();	
+				}
+			}
 	};
 		
-	$(document).ready(function(){
-		var $pickup_button = $('#edit-commerce-shipping-shipping-service-pickup-locator-service');
-		var response;
-		var selectedMarker;
-		
-		getServicePointsByAjax();
-		
-		$("#mapAddress li input").live('change',function(){
-			selectedMarker = $(this).children('.service_postcode').val();
-			console.log(selectedMarker);
-			maps.selectMarker(selectedMarker);
-		});
-		
-		$("#edit-commerce-shipping-service-details-find-location").live('click',function(){
-			jQuery.modal(jQuery("#showMap").html(), {
-				autoResize:true,
-				maxWidth: 754,
-				containerCss: {
-					backgroundColor:"#FFF",
-					top: "10%",
-					bottom: "10%",
-					left: "10%",
-					right: "10%",
-				},
-				overlayClose:true,
-			});
-		});
-	});
-	
 	this.callback = function(f) {
 		if(typeof f === "function") {
 			f();
@@ -111,12 +266,99 @@ function PickupLocator(){
 	this.getPostCode = function() {
 		return postCode;
 	};
+	
+	var markPickupAdressOnClickEvent = function() {
+		$(".pickup-address").live('click', function(){
+			$(".pickup-address").removeClass("isSelected");
+			$(this).addClass("isSelected");
+		});
+	};
+	
+	var openModalDialog = function() {
+		jQuery.modal("<span id='modal_sogloader'></span><span id='postnord-logo'></span><div id='map_canvas' style='width:100%; height: 360px; margin: 0 auto;'></div><div id='pickup_place_list'></div>", {
+			opacity: 80,
+			overlayClose:true,
+			containerCss: {
+				position: 'absolute',
+				backgroundColor:"#FFF",
+				height:450,
+				padding:0, 
+				width:830
+			},
+			onShow: function (dlg) {
+ 	     	$(dlg.container).css('height', 'auto');
+ 	     	$(dlg.container).css('top', "10%");
+        $(dlg.wrap).css('overflow', 'auto'); // or try jQuery.modal.update();
+        $(dlg.wrap).css('background', '#FFF'); // or try jQuery.modal.update();
+  		},
+ 
+		});
+	};
+	
+	var attachChangePickupEvent = function(){
+		var selectedMarker;
+		
+		$("#mapAddress li input").live('change',function(){
+			selectedMarker = $(this).val();
+			maps.selectMarkerOnRadioButtonClick(selectedMarker);
+			$(this).parent().closest('.pickup-address').toggleClass("isSelected");
+		});
+	};
+	
+	var reloadServicePoints = function() {
+		loaderShow();
+		areServicePointsLoaded = false;
+		getServicePointsByAjax();
+		markPickupAdressOnClickEvent();
+		attachChangePickupEvent();
+	};
+	
+	var createPostCodeInputField = function() {
+		$("#simplemodal-data").append("<div class='postcode'><input type='text' id='postcode-input' placeholder='Indtast et andet postnummer:' /></div>");
+		$("#postcode-input").live('change',function() {
+			var postcode = $(this).val();
+			setPostcode(postcode);
+			reloadServicePoints();
+		});
+	};
+	
+	var openModalAndGetServicePoints = function() {
+		openModalDialog();
+		getServicePointsByAjax();
+		markPickupAdressOnClickEvent();
+		attachChangePickupEvent();
+		createPostCodeInputField();
+	};
+	
+	var attachPickupLocationButtonClickEvent = function(){
+		$("#edit-commerce-shipping-service-details-find-location").live('click',function(){
+			openModalAndGetServicePoints();
+		});
+	};
+	
+	var setPostcode = function(postcode) {
+		postCode = postcode;
+	};
+	
+	
+	var init = function(){
+		openModalAndGetServicePoints();
+		attachPickupLocationButtonClickEvent();
+	};
+	
+	/**
+	 * ALL Functions starts HERE!!!!
+	 */
+	$(document).ready(function(){
+		init();
+	});
 }
 
 function Maps() {
 	var geocoder;
 	var map;
 	var markers = Array();
+	var lastInfoWindow;
 	
 	this.initializeMap = function(addresses, name, number, opening, close, opening_sat, close_sat, lat, lng, servicePointId) {
 	    var latlng = new google.maps.LatLng(56, 10);
@@ -131,7 +373,7 @@ function Maps() {
 	    map.setZoom(map.getZoom());
 	
 	    for (i = 0; i < addresses.length; i++) {
-	        this.codeAddress(addresses[i], name[i], number[i], i, opening[i], close[i], opening_sat[i], close_sat[i], lat[i], lng[i], '', servicePointId[i]);
+	        codeAddress(addresses[i], name[i], number[i], i, opening[i], close[i], opening_sat[i], close_sat[i], lat[i], lng[i], '', servicePointId[i]);
 	    }
 	
 	    for (var i = 0; i < lat.length; i++) {
@@ -156,20 +398,43 @@ function Maps() {
 	
 	    if (lat_max != '' && lat_min != '' && lng_max != '' && lng_min != '') {
 	        map.setCenter(new google.maps.LatLng(
-	                ((lat_max + lat_min) / 2.0),
-	                ((lng_max + lng_min) / 2.0)
-	                ));
+            ((lat_max + lat_min) / 2.0),
+            ((lng_max + lng_min) / 2.0)
+          ));
 	
 	        map.fitBounds(new google.maps.LatLngBounds(
-	                //bottom left
-	                new google.maps.LatLng(lat_min, lng_min),
-	                //top right
-	                new google.maps.LatLng(lat_max, lng_max)
-	                ));
+            //bottom left
+            new google.maps.LatLng(lat_min, lng_min),
+            //top right
+            new google.maps.LatLng(lat_max, lng_max)
+          ));
 	    }
 	};
+	 
+  var disableBounceAtAllMarkers = function() {
+  	var x = 0;
+    while (x < markers.length) {
+    	if(markers[x].getAnimation != null)
+      	markers[x].setAnimation(null);
+      x++;
+    }
+  };
+  
+  var getInputForMarker = function(marker) {
+ 		return jQuery('#place_'+marker.serviceId);
+  };
+  
+  var getClosestAdressBlocktoivenInput = function($input) {
+  	return $input.parent().find('.pickup-address');
+  };
+  
+  var getOpeningTimeForTheMarker = function(marker) {
+  	$input = getInputForMarker(marker);
+  	$addressBlock = getClosestAdressBlocktoivenInput($input);
+  	return jQuery($addressBlock).find('.servicepoint-opening-block').html();
+  };
 	
-	this.codeAddress = function(address, name, number, i, opening, close, opening_sat, close_sat, lat, lng, city, servicePointId) {
+	var codeAddress = function(address, name, number, i, opening, close, opening_sat, close_sat, lat, lng, city, servicePointId) {
 	
 	    if (opening != '' && close != '' && opening != null && close != null) {
 	        opening = 'Abningstider:<br />Mon-Fri: ' + opening.substring(0, 2) + ':' + opening.substring(2) + ' - ';
@@ -186,7 +451,7 @@ function Maps() {
 	        opening_sat = '';
 	        close_sat = '';
 	    }
-	
+	    
 	    var center_zoom;
 	    var latlng = new google.maps.LatLng(lat, lng);
 	    var marker = new google.maps.Marker({
@@ -195,9 +460,9 @@ function Maps() {
 	        animation: google.maps.Animation.DROP,
 	        icon: "http://chart.apis.google.com/chart?chst=d_map_pin_letter&chld=" + (i + 1) + "|FF0000|000000",
 	        serviceId: servicePointId,
-	        draggable: true
+	        draggable: false
 	    });
-	
+	    
 	    if (typeof(number) == undefined) {
 	        number = '';
 	    }
@@ -211,37 +476,75 @@ function Maps() {
 	    });
 	
 	    markers.push(marker);
-	    google.maps.event.addListener(marker, "click", toggleBounce);
-	
-	    function toggleBounce() {
-	    	console.log('bounce');
-	        var x = 0;
-	        while (x < markers.length) {
-	            markers[x].setAnimation(google.maps.Animation.BOUNCE);
-	            x++;
-	        }
-	        this.setAnimation(google.maps.Animation.BOUNCE);
+	   
+	    
+	    var toggleBounceAndSelectRadio = function() {
+	    		disableBounceAtAllMarkers();
+			    this.setAnimation(google.maps.Animation.BOUNCE);
 	        selectRadioOnMarkerClick(this);
-	    }
+	       	
+	       	var openingTime = getOpeningTimeForTheMarker(this);
+	       	
+	        var infowindow = new google.maps.InfoWindow({
+				      content: "<strong>"+Drupal.t("Opening Time:")+"</strong><br />" + openingTime, 
+				      					
+				  });
+				  
+				  if(lastInfoWindow != undefined)
+				  	lastInfoWindow.close();
+					
+	       	if(openingTime == null || openingTime == '') 
+	       		return;
+	       		
+				  infowindow.open(map,this);
+				  lastInfoWindow = infowindow;
+	    };
 	
-	    function selectRadioOnMarkerClick(marker) {
-	        jQuery('input[name="postnord_pickupLocation"][value="' + marker.serviceId + '"]')[0].checked = true;
-	    }
+	    google.maps.event.addListener(marker, "click", toggleBounceAndSelectRadio);
+	    
+	    
+			function markClosestAdressBlockToGivenInput($input) {
+				jQuery('.pickup-address').removeClass('isSelected');
+				$input.parent().find('.pickup-address').addClass('isSelected');
+			}
+			
+		  function selectRadioOnMarkerClick(marker) {
+	      var $addressBlock; 
+		  	if(jQuery('input[name="postnord_pickupLocation"][value="' + marker.serviceId + '"]').length > 0)
+		      jQuery('input[name="postnord_pickupLocation"][value="' + marker.serviceId + '"]')[0].checked = true;
+		      $input = getInputForMarker(marker);
+		      markClosestAdressBlockToGivenInput($input);
+		  }
 	};
 	
-	this.selectMarker = function(id) {
+	this.selectMarkerOnRadioButtonClick = function(id) {
 	    var bouncex = false;
 	    var x = 0;
 	    while (x < markers.length) {
 	        markers[x].setAnimation(null);
 	        if (markers[x].serviceId == id) {
 	            bouncex = x;
+	            activeMarker = markers[x];
 	        }
 	        x++;
 	    }
 	    if (bouncex !== false) {
 	        markers[bouncex].setAnimation(google.maps.Animation.BOUNCE);
 	    }
-	    //jQuery('input[name="postnord_pickupLocation"][value="' + id + '"]')[0].checked = true;
+	    
+    	var openingTime = getOpeningTimeForTheMarker(activeMarker);
+	    
+      var infowindow = new google.maps.InfoWindow({
+		      content: "<strong>"+Drupal.t("Opening Time:")+"</strong><br />" + openingTime
+		  });
+		  
+		  if(lastInfoWindow != undefined)
+		  	lastInfoWindow.close();
+		  	
+  		if(openingTime == null || openingTime == '') 
+     		return;
+
+		  infowindow.open(map,activeMarker);
+		  lastInfoWindow = infowindow;
 	};
 }
