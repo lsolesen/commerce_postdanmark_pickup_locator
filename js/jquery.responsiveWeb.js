@@ -1,7 +1,7 @@
 /*!
  * jQuery lightweight responsive web adaptation plugin
  * Original author: @stildv
- * Copyright © 2011: Devrim Vardar, @stildv -- http://stild.com/
+ * Copyright ï¿½ 2011: Devrim Vardar, @stildv -- http://stild.com/
  * Further changes, comments: @stildv -- http://stild.com/code/jquery-responsive-web/
  * Dual licensed under the MIT or GPL Version 2 licenses.
  * http://stild.com/license/
