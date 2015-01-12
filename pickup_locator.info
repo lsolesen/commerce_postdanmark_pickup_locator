@@ -6,7 +6,3 @@ dependencies[] = commerce_shipping
 core = 7.x
 
 configure = admin/commerce/config/shipping/methods/pickup_locator/edit
-
-files[] = pickup_locator.admin.info
-files[] = pickup_locator.install
-files[] = pickup_locator.module

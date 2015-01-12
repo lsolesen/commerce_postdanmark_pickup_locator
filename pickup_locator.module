@@ -72,7 +72,6 @@ function pickup_locator_commerce_shipping_method_info() {
 
 function pickup_locator_commerce_shipping_service_info() {
   $shipping_services = array();
-	if(variable_get('pickup_locator_license_status', 0)==1) {
 	  $shipping_services['pickup_locator_service'] = array(
 	    'title' => t('Danish Post pickup method'),
 	    'description' => t('Danish post pickup locator service to find places on the map.'),
@@ -86,7 +85,6 @@ function pickup_locator_commerce_shipping_service_info() {
 	      'details_form_submit' => 'pickup_locator_service_details_form_submit',
 	    ),
 	  );
-	}
 
   return $shipping_services;
 }
@@ -688,6 +686,3 @@ function getMapHtml($radioHtml = null) {
 			
 	return $googleMapContent;
 }
-
-
-
