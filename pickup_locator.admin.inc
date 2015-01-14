@@ -4,23 +4,22 @@
 * @file
 * Administration page callbacks for the pickup_locator module.
 */
+
 /**
-* Form builder. Configure Pickup API.
-*
-* @ingroup forms
-* @see system_settings_form().
-*/
-
-
+ * Form builder. Configure Pickup API.
+ *
+ * @ingroup forms
+ * @see system_settings_form().
+ */
 function pickup_locator_settings_form(){
-	$form['pickup_locator_api'] = array(
+	$form['pickup_locator_consumer_id'] = array(
 		'#type' => 'textfield',
-		'#title' => t('Pickup Location API KEY'),
+		'#title' => t('Pickup Location Consumer ID'),
 		'#size' => 40,
 		'#required' => true,
-		'#default_value' => variable_get('pickup_locator_api',''),
+		'#default_value' => variable_get('pickup_locator_consumer_id',''),
 	);
-	
+
 	$form['pickup_locator_rate'] = array(
 		'#type' => 'textfield',
 		'#title' => t('Pickup Location Shipping rate'),
@@ -28,10 +27,9 @@ function pickup_locator_settings_form(){
 		'#required' => true,
 		'#default_value' => variable_get('pickup_locator_rate',''),
 	);
-	
+
 	$form['#submit'][] = 'pickup_locator_settings_form_submit';
 	return system_settings_form($form);
-	
 }
 
 
@@ -44,6 +42,6 @@ function pickup_locator_settings_form_validate($form, &$form_state) {
 }
 
 function pickup_locator_settings_form_submit($form, $form_state) {
-	variable_set('pickup_locator_api',$form_state['values']['pickup_locator_api']);
+	variable_set('pickup_locator_api',$form_state['values']['pickup_locator_consumer_id']);
 	variable_set('pickup_locator_rate',$form_state['values']['pickup_locator_rate']);
 }

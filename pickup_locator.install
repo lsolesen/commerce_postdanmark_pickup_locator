@@ -47,6 +47,9 @@ function getServiceFields(){
  * Implements hook_uninstall().
  */
 function pickup_locator_uninstall() {
+  variable_del('pickup_locator_consumer_id');
+  variable_del('pickup_locator_rate');
+
 	$fields = getServiceFields();
 	watchdog('pickup_locator', 'uninstall');
 	foreach ($fields as $field) {
@@ -59,6 +62,7 @@ function pickup_locator_uninstall() {
 		}
 	}
 }
+
 /**
  * Implements hook_install().
  */

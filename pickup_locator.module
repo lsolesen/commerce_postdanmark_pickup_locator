@@ -10,7 +10,6 @@
 */
 
 function pickup_locator_menu() {
-	
 	$items['admin/commerce/config/shipping/methods/pickup_locator/messages'] = array(
 		'title' => 'Pickup Locations',
 		'description' => 'Change your pickup locations options',
@@ -45,6 +44,66 @@ function pickup_locator_menu() {
   );
   
 	return $items;
+}
+
+/**
+ * Implements hook_libraries_info().
+ */
+function postnord_libraries_info() {
+  $libraries = array();
+  $libraries['postnord-php'] = array(
+    'name' => 'PostNord',
+    'vendor url' => 'https://github.com/lsolesen/postnord-sdk',
+    'version' => 'master',
+    'xautoload' => function($adapter) {
+      /** @var \Drupal\xautoload\Adapter\LocalDirectoryAdapter $adapter */
+      $adapter->composerJson('composer.json');
+    }
+  );
+  return $libraries;
+}
+
+/**
+ * Get a PostNord_Client object
+ *
+ * Object for communication with the the PostNord server.
+ *
+ * @throws Exception
+ * @return PostNord_Client
+ */
+function postnord_get_api_client() {
+  try {
+    $request = postnord_get_api_request();
+    return new PostNord_Client($request);
+  }
+  catch (PostNord_Exception $e) {
+    throw $e;
+  }
+}
+
+/**
+ * Get a PostNord_Request object
+ *
+ * Object for communication with the the PostNord server.
+ *
+ * @throws Exception
+ * @return PostNord_Request
+ */
+function postnord_get_api_request() {
+  $library = libraries_detect('postnord-php');
+  if ($library['installed']) {
+    libraries_load('postnord-php');
+
+    if (!variable_get('pickup_locator_consumer_id', '')) {
+      // @todo: Provide link to admin settings form.
+      throw new Exception(t('You must set an Consumer ID in order to use PostNord', array()));
+    }
+
+    return new PostNord_Request(variable_get('pickup_locator_consumer_id', ''));
+  }
+  else {
+    throw new Exception(t('PostNord library not installed'));
+  }
 }
 
 function pickup_locator_get_ajax_points(){
@@ -440,7 +499,7 @@ function getOpeningHoursFormServicePoint($point) {
 }
     //Get postnord
 function getPostnordServicePoints($postcode) {
-		$api_key = variable_get('pickup_locator_api','');
+		$api_key = variable_get('pickup_locator_consumer_id','');
 		$country_code = 'DK';
 		$numberOfServicePoints = 12;
 		$google_map = 'yes';
@@ -450,7 +509,7 @@ function getPostnordServicePoints($postcode) {
 		}
 		
 		if(!isValidApiKey($api_key)) {
-    	return array('error' => t('Api key is empty. You must insert api key in module configuration menu'));
+    	return array('error' => t('Consumer ID is empty. You must insert Consumer ID in module configuration menu'));
 		}
 		
     $url = "http://api.postnord.com/wsp/rest/BusinessLocationLocator" .
